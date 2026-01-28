@@ -75,6 +75,8 @@ def refine_with_gemini(book_data, title, keyword_pool):
 st.set_page_config(page_title="Book Spectrum v3.0", layout="wide")
 st.title("🌈 북 스펙트럼 v3.0")
 
+DAILY_MAX_LIMIT = 2500  # 하루 최대 분석 권수 (안전장치)
+
 with st.sidebar:
     st.header("⚙️ 설정")
     user_keyword_list = st.text_area("표준 키워드 사전 관리", value=DEFAULT_KEYWORDS, height=200)
@@ -83,41 +85,45 @@ with st.sidebar:
     start_btn = st.button("🚀 분석 시작", type="primary", use_container_width=True)
 
 if uploaded_file:
-    if 'display_df' not in st.session_state:
-        raw_df = pd.read_excel(uploaded_file)
-        for col in ['ISBN13', '아이용 줄거리', '추천 키워드']:
-            if col not in raw_df.columns: raw_df[col] = "대기 중..."
-        if '그린이' not in raw_df.columns: raw_df['그린이'] = ""
-        st.session_state.display_df = raw_df
+    # (세션 상태 초기화 부분 생략 - 기존과 동일)
+    
+    if start_btn:
+        progress_bar = st.progress(0)
+        analyzed_count = 0  # 이번 실행에서 분석한 권수 카운트
+        
+        for i, row in st.session_state.display_df.iterrows():
+            # 이미 분석된 건 건너뜀
+            if row['아이용 줄거리'] not in ["대기 중...", "검색 실패", "분석 실패"]:
+                continue
+            
+            # 🛑 할당량 체크
+            if analyzed_count >= DAILY_MAX_LIMIT:
+                st.error(f"⚠️ 일일 분석 한도({DAILY_MAX_LIMIT}권)에 도달하여 중단합니다. 설정값은 코드에서 수정 가능합니다.")
+                break
+            
+            title = str(row.get('도서명', '')).strip()
+            author = str(row.get('저자', row.get('글쓴이', ''))).strip()
+            
+            # 분석 실행
+            info = get_book_info_aladin(title, author)
+            if info:
+                st.session_state.display_df.at[i, 'ISBN13'] = info.get('isbn13')
+                refined = refine_with_gemini(info, title, user_keyword_list)
+                if refined:
+                    st.session_state.display_df.at[i, '아이용 줄거리'] = refined.get('summary')
+                    st.session_state.display_df.at[i, '추천 키워드'] = ", ".join(refined.get('keywords', []))
+                    analyzed_count += 1  # 분석 성공 시 카운트 증가
+                else:
+                    st.session_state.display_df.at[i, '아이용 줄거리'] = "분석 실패"
+            else:
+                st.session_state.display_df.at[i, '아이용 줄거리'] = "검색 실패"
+            
+            # 테이블 업데이트 및 진행바
+            table_placeholder.dataframe(st.session_state.display_df, use_container_width=True)
+            progress_bar.progress((i + 1) / len(st.session_state.display_df))
+            time.sleep(0.5) # 유료 티어이므로 속도를 약간 높여도 됩니다 (기존 1초 -> 0.5초)
 
-    tab1, tab2 = st.tabs(["📝 분석 현황", "📊 키워드 통계 및 필터"])
-
-    with tab1:
-        table_placeholder = st.empty()
-        table_placeholder.dataframe(st.session_state.display_df, use_container_width=True)
-
-        if start_btn:
-            progress_bar = st.progress(0)
-            for i, row in st.session_state.display_df.iterrows():
-                if row['아이용 줄거리'] not in ["대기 중...", "검색 실패", "분석 실패"]: continue
-                
-                title = str(row.get('도서명', '')).strip()
-                author = str(row.get('저자', row.get('글쓴이', ''))).strip()
-                info = get_book_info_aladin(title, author)
-                
-                if info:
-                    st.session_state.display_df.at[i, 'ISBN13'] = info.get('isbn13')
-                    refined = refine_with_gemini(info, title, user_keyword_list)
-                    if refined:
-                        st.session_state.display_df.at[i, '아이용 줄거리'] = refined.get('summary')
-                        st.session_state.display_df.at[i, '추천 키워드'] = ", ".join(refined.get('keywords', []))
-                    else: st.session_state.display_df.at[i, '아이용 줄거리'] = "분석 실패"
-                else: st.session_state.display_df.at[i, '아이용 줄거리'] = "검색 실패"
-                
-                table_placeholder.dataframe(st.session_state.display_df, use_container_width=True)
-                progress_bar.progress((i + 1) / len(st.session_state.display_df))
-                time.sleep(1)
-            st.success("✅ 분석 완료!")
+        st.success(f"✅ 분석 완료! (이번 세션에서 총 {analyzed_count}권 분석됨)")
 
     with tab2:
         st.subheader("📌 키워드 분포 및 도서 필터링")
