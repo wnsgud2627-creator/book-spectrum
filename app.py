@@ -11,8 +11,8 @@ import os
 # ==========================================
 # 1. 설정 및 API 초기화
 # ==========================================
-ALADIN_TTB_KEY = ""
-GOOGLE_API_KEY = ""
+ALADIN_TTB_KEY = st.secrets["ALADIN_TTB_KEY"]
+GOOGLE_API_KEY = st.secrets["GOOGLE_API_KEY"]
 MODEL_ID = 'models/gemini-2.5-flash'
 
 DEFAULT_KEYWORDS = (
