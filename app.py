@@ -37,27 +37,29 @@ def login():
 # 2. 메인 앱 실행 (로그인 성공 시)
 # ==========================================
 if login():
-    # --- API 키 및 설정 ---
-    ALADIN_TTB_KEY = st.secrets["ALADIN_TTB_KEY"]
-    GOOGLE_API_KEY = st.secrets["GOOGLE_API_KEY"]
-    MODEL_ID = 'models/gemini-2.5-flash'
+    # --- 설정 값 ---
+    # 알라딘 키는 기존처럼 secrets에서 가져오거나 필요시 입력창으로 뺄 수 있습니다.
+    ALADIN_TTB_KEY = st.secrets.get("ALADIN_TTB_KEY", "여기에_기본값_입력")
+    MODEL_ID = 'models/gemini-2.0-flash' # 최신 모델명으로 업데이트# --- 화면 구성 (사이드바) ---
+    with st.sidebar:
+        st.header("⚙️ 설정")
+        
+        # [추가] Gemini API 키 입력창
+        user_gemini_key = st.text_input("Gemini API Key 입력", type="password", help="Google AI Studio에서 발급받은 API 키를 입력하세요.")
+        
+        st.divider()
+        user_keyword_list = st.text_area("표준 키워드 사전 관리", value=DEFAULT_KEYWORDS, height=200)
+        st.divider()
+        uploaded_file = st.file_uploader("원본 엑셀 업로드", type=["xlsx"])
+        start_btn = st.button("🚀 분석 시작", type="primary", use_container_width=True)
 
-    DEFAULT_KEYWORDS = (
-        "마음, 용기, 행복, 사랑, 감정, 자신감, 인성, 약속, 성장, 호기심, "
-        "가족, 친구, 이웃, 유치원, 선생님, 예절, 도움, 음식, 건강, 생활습관, "
-        "잠자기, 화장실, 안전, 동물, 곤충, 바다, 식물, 계절, 날씨, 우주, "
-        "지구, 환경, 공룡, 과학, 상상, 모험, 색깔, 소리, 미술, 음악, "
-        "마법, 옛이야기, 전통, 장래희망, 공주, 학교, 숫자, 의사소통, 모양, 수학, "
-        "생일, 한글, 운동, 우리나라, 탈것, 세계 여러 나라, 놀이, 도구, 옷, 책"
-    )
+    # --- 클라이언트 초기화 함수 ---
+    def get_gemini_client():
+        if not user_gemini_key:
+            return None
+        return genai.Client(api_key=user_gemini_key)
 
-    @st.cache_resource
-    def init_gemini_client():
-        return genai.Client(api_key=GOOGLE_API_KEY)
-
-    client = init_gemini_client()
-
-    # --- 내부 기능 함수 ---
+    # --- 내부 기능 함수 (줄거리 요약 및 키워드 추출) ---
     def get_book_info_aladin(title, author=""):
         url = "http://www.aladin.co.kr/ttb/api/ItemSearch.aspx"
         clean_title = re.sub(r'\(.*?\)|\[.*?\]', '', str(title))
@@ -77,31 +79,26 @@ if login():
         except: pass
         return None
 
-    def refine_with_gemini(book_data, title, keyword_pool):
+    def refine_with_gemini(client, book_data, title, keyword_pool):
         if not client or not book_data: return None
         
         prompt = f"""
         당신은 4~7세 도서 추천 시스템의 전문 카피라이터입니다.
         '{title}'의 정보를 바탕으로 줄거리와 키워드를 생성하세요.
 
-        [작업 1: 줄거리 요약 - 최상위 규정]
-        1. **반드시 독립된 3문장**으로 작성하세요.
-        2. **글자 수 제한**: 각 문장은 띄어쓰기 포함 **35자 이내**로 짧고 명확하게 끊으세요.
-        3. **금지어**: "안녕", "친구들", "소개할게요", "이 책은" 절대 금지.
-        4. **모범 답안**:
-           "빨간 코끼리의 길다란 코 위로 개성 넘치는 동물 친구들이 하나둘 등장합니다. 
-           기다란 코 위에서 벌어지는 동물들의 유쾌한 이야기를 따라가며 저절로 숫자를 익힐 수 있을 거예요. 
-           동물 친구들과 함께 신나는 숫자 세기 놀이에 참여해 볼까요?"
+        [작업 1: 줄거리 요약]
+        - 반드시 독립된 3문장, 각 문장 35자 이내로 작성하세요.
+        - 모범 스타일: "빨간 코끼리의 길다란 코 위로 동물 친구들이 등장합니다. 코 위에서 벌어지는 유쾌한 이야기를 따라가며 숫자를 익혀요. 우리 함께 신나는 숫자 놀이를 시작해 볼까요?"
 
-        [작업 2: 키워드 구성 - 5개 명사형 강제]
-        1. **키워드 1, 2, 3 (표준)**: 아래 [표준 목록]에서 가장 관련 깊은 단어 3개 선택.
-        2. **키워드 4 (주인공)**: 책의 주인공을 나타내는 핵심 명사 1개.
-        3. **키워드 5 (주제 및 소재)**: 줄거리를 관통하는 가장 중요한 소재나 주제어 1개. 
-        4. **주의**: 모든 키워드는 반드시 명사여야 합니다.
-        5. **추출 예시**:
-             - 예시 1 (무지개 물고기): ["인성", "친구", "행복", "물고기", "나눔"]
-             - 예시 2 (백설공주): ["마음", "질투", "옛이야기", "공주", "사과"]
-             - 예시 3 (강아지 똥): ["성장", "사랑", "생명", "강아지똥", "민들레"]
+        [작업 2: 키워드 구성 - 명사형 5개]
+        - 키워드 1, 2, 3: [표준 목록] 내 단어 선택
+        - 키워드 4: 주인공 (이야기를 이끄는 핵심 화자)
+        - 키워드 5: 주제 또는 핵심 소재 (이야기의 메시지나 주요 사건)
+
+        [명작 동화 예시]
+        - 예시 1 (무지개 물고기): ["인성", "친구", "행복", "물고기", "나눔"]
+        - 예시 2 (백설공주): ["마음", "질투", "옛이야기", "공주", "사과"]
+        - 예시 3 (강아지 똥): ["성장", "사랑", "생명", "강아지똥", "민들레"]
         
         [표준 목록]: {keyword_pool}
         정보 원문: {book_data['desc'][:1000]}
@@ -118,15 +115,8 @@ if login():
             return json.loads(json_text.group()) if json_text else None
         except Exception: return None
 
-    # --- 화면 구성 ---
+    # --- 메인 화면 구성 ---
     st.title("🌈 AI 도서 데이터 분석기_v1.0")
-
-    with st.sidebar:
-        st.header("⚙️ 설정")
-        user_keyword_list = st.text_area("표준 키워드 사전 관리", value=DEFAULT_KEYWORDS, height=200)
-        st.divider()
-        uploaded_file = st.file_uploader("원본 엑셀 업로드", type=["xlsx"])
-        start_btn = st.button("🚀 분석 시작", type="primary", use_container_width=True)
 
     if uploaded_file:
         if 'display_df' not in st.session_state:
@@ -143,27 +133,32 @@ if login():
             table_placeholder.dataframe(st.session_state.display_df, use_container_width=True)
 
             if start_btn:
-                progress_bar = st.progress(0)
-                for i, row in st.session_state.display_df.iterrows():
-                    if row['아이용 줄거리'] not in ["대기 중...", "검색 실패", "분석 실패"]: continue
+                # API 키 체크
+                client = get_gemini_client()
+                if not client:
+                    st.error("⚠️ Gemini API Key를 입력해주세요!")
+                else:
+                    progress_bar = st.progress(0)
+                    for i, row in st.session_state.display_df.iterrows():
+                        if row['아이용 줄거리'] not in ["대기 중...", "검색 실패", "분석 실패"]: continue
 
-                    title = str(row.get('도서명', '')).strip()
-                    author = str(row.get('저자', row.get('글쓴이', ''))).strip()
-                    info = get_book_info_aladin(title, author)
+                        title = str(row.get('도서명', '')).strip()
+                        author = str(row.get('저자', row.get('글쓴이', ''))).strip()
+                        info = get_book_info_aladin(title, author)
 
-                    if info:
-                        st.session_state.display_df.at[i, 'ISBN13'] = info.get('isbn13')
-                        refined = refine_with_gemini(info, title, user_keyword_list)
-                        if refined:
-                            st.session_state.display_df.at[i, '아이용 줄거리'] = refined.get('summary')
-                            st.session_state.display_df.at[i, '추천 키워드'] = ", ".join(refined.get('keywords', []))
-                        else: st.session_state.display_df.at[i, '아이용 줄거리'] = "분석 실패"
-                    else: st.session_state.display_df.at[i, '아이용 줄거리'] = "검색 실패"
+                        if info:
+                            st.session_state.display_df.at[i, 'ISBN13'] = info.get('isbn13')
+                            refined = refine_with_gemini(client, info, title, user_keyword_list)
+                            if refined:
+                                st.session_state.display_df.at[i, '아이용 줄거리'] = refined.get('summary')
+                                st.session_state.display_df.at[i, '추천 키워드'] = ", ".join(refined.get('keywords', []))
+                            else: st.session_state.display_df.at[i, '아이용 줄거리'] = "분석 실패"
+                        else: st.session_state.display_df.at[i, '아이용 줄거리'] = "검색 실패"
 
-                    table_placeholder.dataframe(st.session_state.display_df, use_container_width=True)
-                    progress_bar.progress((i + 1) / len(st.session_state.display_df))
-                    time.sleep(1)
-                st.success("✅ 분석 완료!")
+                        table_placeholder.dataframe(st.session_state.display_df, use_container_width=True)
+                        progress_bar.progress((i + 1) / len(st.session_state.display_df))
+                        time.sleep(1) # API 레이트 리밋 방지용
+                    st.success("✅ 분석 완료!")
 
         with tab2:
             st.subheader("📌 키워드 분포 및 도서 필터링")
