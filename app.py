@@ -145,7 +145,7 @@ if login():
         except: return None
 
     # --- 메인 화면 ---
-    st.title(f"🌈 도서 데이터 분석기 v4.6 ({age_group.split()[0]})")
+    st.title(f"🌈 도서 데이터 분석기 v2")
 
     if uploaded_file:
         if 'display_df' not in st.session_state:
