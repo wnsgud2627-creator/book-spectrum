@@ -11,7 +11,7 @@ import os
 # ==========================================
 # 0. 페이지 기본 설정
 # ==========================================
-st.set_page_config(page_title="Book Spectrum v4.6", layout="wide")
+st.set_page_config(page_title="Book Spectrum v4.7", layout="wide")
 
 # ==========================================
 # 1. 로그인 기능
@@ -57,7 +57,6 @@ if login():
     # --- 사이드바 설정 ---
     with st.sidebar:
         st.header("⚙️ 분석 설정")
-        # 연령대 선택 (라디오 버튼 - 중복 불가)
         age_group = st.radio("📚 대상 연령대", ["유아 (4~7세)", "초등 (8~13세)", "중등 (14~16세)"], index=0)
         
         st.divider()
@@ -78,7 +77,7 @@ if login():
         uploaded_file = st.file_uploader("엑셀 업로드", type=["xlsx"])
         start_btn = st.button("🚀 분석 시작", type="primary", use_container_width=True)
 
-    # --- 분석 함수 ---
+    # --- 분석 함수 정의 ---
     def get_book_info_aladin(title, author=""):
         if not (get_isbn or get_summary or get_keywords): return None
         url = "http://www.aladin.co.kr/ttb/api/ItemSearch.aspx"
@@ -101,7 +100,6 @@ if login():
 
     def refine_with_gemini(book_data, title, keyword_pool, std_n, total_n, age_group):
         if not (get_summary or get_keywords): return {"summary": "생략", "keywords": []}
-        
         extra_n = total_n - std_n
         
         if "유아" in age_group:
@@ -111,10 +109,8 @@ if login():
         else:
             persona, char_limit = "중등 국어 교육 및 문학 분석가", 65
 
-        # [상세 프롬프트 복구]
         prompt = f"""
-        당신은 {persona}입니다. 
-        '{title}'의 정보를 바탕으로 줄거리와 키워드를 생성하세요.
+        당신은 {persona}입니다. '{title}'의 정보를 바탕으로 줄거리와 키워드를 생성하세요.
 
         [작업 1: 줄거리 요약]
         1. **반드시 독립된 3문장**으로 작성하세요.
@@ -144,29 +140,28 @@ if login():
             return json.loads(json_text.group()) if json_text else None
         except: return None
 
-    # --- 메인 화면 ---
-    st.title(f"🌈 도서 데이터 분석기 v2")
+    # --- 메인 화면 실행 ---
+    st.title("🌈 도서 데이터 분석기 v4.7")
 
-if uploaded_file:
-    # [수정된 로직] 파일 이름이 바뀌거나 새로 업로드되면 데이터를 초기화합니다.
-    # 파일 객체 자체를 키로 활용하거나, 업로드 시점을 체크합니다.
-    if "current_file" not in st.session_state or st.session_state.current_file != uploaded_file.name:
-        raw_df = pd.read_excel(uploaded_file)
-        # 항목 선택에 따른 컬럼 초기화
-        if get_isbn and 'ISBN13' not in raw_df.columns: raw_df['ISBN13'] = "대기 중..."
-        if get_summary and '아이용 줄거리' not in raw_df.columns: raw_df['아이용 줄거리'] = "대기 중..."
-        if get_keywords and '추천 키워드' not in raw_df.columns: raw_df['추천 키워드'] = "대기 중..."
-        if '그린이' not in raw_df.columns: raw_df['그린이'] = ""
-        
-        st.session_state.display_df = raw_df
-        st.session_state.current_file = uploaded_file.name # 현재 파일명 저장
-        
+    if uploaded_file:
+        # [해결] 새 파일 업로드 시 세션 초기화 로직
+        if "current_file" not in st.session_state or st.session_state.current_file != uploaded_file.name:
+            raw_df = pd.read_excel(uploaded_file)
+            if get_isbn and 'ISBN13' not in raw_df.columns: raw_df['ISBN13'] = "대기 중..."
+            if get_summary and '아이용 줄거리' not in raw_df.columns: raw_df['아이용 줄거리'] = "대기 중..."
+            if get_keywords and '추천 키워드' not in raw_df.columns: raw_df['추천 키워드'] = "대기 중..."
+            st.session_state.display_df = raw_df
+            st.session_state.current_file = uploaded_file.name
+
+        table_placeholder = st.empty()
+        table_placeholder.dataframe(st.session_state.display_df, use_container_width=True)
+
         if start_btn:
             progress_bar = st.progress(0)
             total = len(st.session_state.display_df)
             
             for i, row in st.session_state.display_df.iterrows():
-                # 건너뛰기 로직
+                # 건너뛰기 조건 체크
                 check_cols = []
                 if get_isbn: check_cols.append('ISBN13')
                 if get_summary: check_cols.append('아이용 줄거리')
@@ -187,16 +182,14 @@ if uploaded_file:
                 else:
                     if get_summary: st.session_state.display_df.at[i, '아이용 줄거리'] = "검색 실패"
                 
-                # 기존처럼 매 행마다 화면 갱신 (안정성)
                 table_placeholder.dataframe(st.session_state.display_df, use_container_width=True)
                 progress_bar.progress((i + 1) / total)
-                
-                # 기존 속도 유지 (1초)
-                time.sleep(1)
+                time.sleep(1) # 유료 등급이지만 안정성을 위해 1초 유지
 
             st.success("✅ 분석 완료!")
 
+        # 다운로드 버튼
         output = io.BytesIO()
         with pd.ExcelWriter(output, engine='openpyxl') as writer:
             st.session_state.display_df.to_excel(writer, index=False)
-        st.download_button("📥 최종 결과 다운로드", data=output.getvalue(), file_name=f"Book_Spectrum_{age_group}.xlsx", use_container_width=True)
+        st.download_button("📥 최종 결과 다운로드", data=output.getvalue(), file_name=f"Result_{age_group}.xlsx", use_container_width=True)
