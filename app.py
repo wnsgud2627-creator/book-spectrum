@@ -77,12 +77,9 @@ if login():
         uploaded_file = st.file_uploader("엑셀 업로드", type=["xlsx"])
         start_btn = st.button("🚀 분석 시작", type="primary", use_container_width=True)
 
-    # --- 분석 함수 정의 ---
-    def get_book_info_aladin(title, author=""):
-        if not (get_isbn or get_summary or get_keywords): return None
+# --- [수정 1] 단계별 검색 함수 ---
+    def fetch_aladin(query):
         url = "http://www.aladin.co.kr/ttb/api/ItemSearch.aspx"
-        clean_title = re.sub(r'\(.*?\)|\[.*?\]', '', str(title))
-        query = f"{clean_title} {str(author).strip()}"
         params = {
             'ttbkey': ALADIN_TTB_KEY, 'Query': query, 'QueryType': 'Keyword',
             'MaxResults': 1, 'Output': 'js', 'SearchTarget': 'Book',
@@ -98,6 +95,25 @@ if login():
         except: pass
         return None
 
+    def get_book_info_aladin(title, publisher="", author=""):
+        if not (get_isbn or get_summary or get_keywords): return None
+        
+        # 정보 정제 (괄호 제거 및 군더더기 제거)
+        clean_title = re.sub(r'\(.*?\)|\[.*?\]', '', str(title)).strip()
+        clean_author = re.sub(r'(글|그림|저|역|편저|외|지음|옮김).*$', '', str(author)).strip()
+        clean_publisher = str(publisher).strip()
+        
+        # 1단계 시도: 제목 + 출판사 + 저자 (기울어 한림 이탁근)
+        q1 = f"{clean_title} {clean_publisher} {clean_author}".strip()
+        result = fetch_aladin(q1)
+        
+        # 2단계 시도: 실패 시 제목 + 저자 (기울어 이탁근)
+        if not result:
+            q2 = f"{clean_title} {clean_author}".strip()
+            result = fetch_aladin(q2)
+            
+        return result
+        
     def refine_with_gemini(book_data, title, keyword_pool, std_n, total_n, age_group):
         if not (get_summary or get_keywords): return {"summary": "생략", "keywords": []}
         extra_n = total_n - std_n
@@ -170,7 +186,12 @@ if login():
                 if all(row.get(c) not in ["대기 중...", "검색 실패", "분석 실패"] for c in check_cols):
                     continue
 
-                info = get_book_info_aladin(row.get('도서명', ''), row.get('저자', ''))
+# --- [수정 2] 출판사, 글쓴이 데이터 전달 ---
+                info = get_book_info_aladin(
+                    title=row.get('도서명', ''),
+                    publisher=row.get('출판사', ''),
+                    author=row.get('글쓴이', row.get('저자', ''))
+                )
                 if info:
                     if get_isbn: st.session_state.display_df.at[i, 'ISBN13'] = info.get('isbn13')
                     refined = refine_with_gemini(info, row.get('도서명'), user_keyword_list, std_kw_count, total_kw_count, age_group)
