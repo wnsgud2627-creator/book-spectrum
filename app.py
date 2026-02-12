@@ -147,17 +147,20 @@ if login():
     # --- 메인 화면 ---
     st.title(f"🌈 도서 데이터 분석기 v2")
 
-    if uploaded_file:
-        if 'display_df' not in st.session_state:
-            raw_df = pd.read_excel(uploaded_file)
-            if get_isbn and 'ISBN13' not in raw_df.columns: raw_df['ISBN13'] = "대기 중..."
-            if get_summary and '아이용 줄거리' not in raw_df.columns: raw_df['아이용 줄거리'] = "대기 중..."
-            if get_keywords and '추천 키워드' not in raw_df.columns: raw_df['추천 키워드'] = "대기 중..."
-            st.session_state.display_df = raw_df
-
-        table_placeholder = st.empty()
-        table_placeholder.dataframe(st.session_state.display_df, use_container_width=True)
-
+if uploaded_file:
+    # [수정된 로직] 파일 이름이 바뀌거나 새로 업로드되면 데이터를 초기화합니다.
+    # 파일 객체 자체를 키로 활용하거나, 업로드 시점을 체크합니다.
+    if "current_file" not in st.session_state or st.session_state.current_file != uploaded_file.name:
+        raw_df = pd.read_excel(uploaded_file)
+        # 항목 선택에 따른 컬럼 초기화
+        if get_isbn and 'ISBN13' not in raw_df.columns: raw_df['ISBN13'] = "대기 중..."
+        if get_summary and '아이용 줄거리' not in raw_df.columns: raw_df['아이용 줄거리'] = "대기 중..."
+        if get_keywords and '추천 키워드' not in raw_df.columns: raw_df['추천 키워드'] = "대기 중..."
+        if '그린이' not in raw_df.columns: raw_df['그린이'] = ""
+        
+        st.session_state.display_df = raw_df
+        st.session_state.current_file = uploaded_file.name # 현재 파일명 저장
+        
         if start_btn:
             progress_bar = st.progress(0)
             total = len(st.session_state.display_df)
