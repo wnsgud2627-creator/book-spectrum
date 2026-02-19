@@ -71,7 +71,7 @@ if login():
         st.divider()
         st.subheader("📊 키워드 수량")
         total_kw_count = st.slider("총 키워드 수", 1, 10, 5)
-        std_kw_count = st.slider("표준 키워드 포함 수", 0, total_kw_count, 3)
+        std_kw_count = st.slider("표준 키워드 포함 수", 0, total_kw_count, 2)
         
         st.divider()
         uploaded_file = st.file_uploader("엑셀 업로드", type=["xlsx"])
@@ -111,6 +111,11 @@ if login():
         if not result:
             q2 = f"{clean_title} {clean_author}".strip()
             result = fetch_aladin(q2)
+
+        # 3단계 시도: 실패 시 제목 + 출판사 (추가된 부분)
+        if not result and clean_publisher:
+            q3 = f"{clean_title} {clean_publisher}".strip()
+            result = fetch_aladin(q3)
             
         return result
         
