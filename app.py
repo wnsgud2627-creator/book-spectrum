@@ -64,7 +64,8 @@ if login():
         
         st.divider()
         st.subheader("🎯 추출 항목")
-        get_isbn = st.checkbox("ISBN13 추출", value=True)
+        #ISBN 검색은 고정
+        get_isbn = st.checkbox("ISBN13 추출(필수)", value=True, disabled=True)
         get_summary = st.checkbox("줄거리 생성", value=True)
         get_keywords = st.checkbox("키워드 추출", value=True)
 
@@ -200,15 +201,32 @@ if login():
                     author=row.get('글쓴이', row.get('저자', ''))
                 )
                 if info:
-                    if get_isbn: st.session_state.display_df.at[i, 'ISBN13'] = info.get('isbn13')
-                    refined = refine_with_gemini(info, row.get('도서명'), user_keyword_list, std_kw_count, total_kw_count, age_group)
-                    if refined:
-                        if get_summary: st.session_state.display_df.at[i, '아이용 줄거리'] = refined.get('summary')
-                        if get_keywords: st.session_state.display_df.at[i, '추천 키워드'] = ", ".join(refined.get('keywords', []))
+                    # 1. ISBN은 무조건 기록 (성공의 증거)
+                    st.session_state.display_df.at[i, 'ISBN13'] = info.get('isbn13')
+                    
+                    # 2. 줄거리나 키워드가 하나라도 체크된 경우에만 Gemini 호출
+                    if get_summary or get_keywords:
+                        refined = refine_with_gemini(info, row.get('도서명'), user_keyword_list, std_kw_count, total_kw_count, age_group)
+                        
+                        if refined:
+                            if get_summary: 
+                                st.session_state.display_df.at[i, '아이용 줄거리'] = refined.get('summary')
+                            if get_keywords: 
+                                st.session_state.display_df.at[i, '추천 키워드'] = ", ".join(refined.get('keywords', []))
+                        else:
+                            # Gemini 분석 자체가 실패한 경우
+                            if get_summary: st.session_state.display_df.at[i, '아이용 줄거리'] = "분석 실패"
+                            if get_keywords: st.session_state.display_df.at[i, '추천 키워드'] = "분석 실패"
                     else:
-                        if get_summary: st.session_state.display_df.at[i, '아이용 줄거리'] = "분석 실패"
+                        # 줄거리/키워드를 아예 체크 안 한 경우 (빈칸 유지 또는 완료 처리)
+                        if get_summary: st.session_state.display_df.at[i, '아이용 줄거리'] = "제외됨"
+                        if get_keywords: st.session_state.display_df.at[i, '추천 키워드'] = "제외됨"
+
                 else:
+                    # 알라딘 검색 자체가 실패한 경우
+                    if get_isbn: st.session_state.display_df.at[i, 'ISBN13'] = "검색 실패"
                     if get_summary: st.session_state.display_df.at[i, '아이용 줄거리'] = "검색 실패"
+                    if get_keywords: st.session_state.display_df.at[i, '추천 키워드'] = "검색 실패"
                 
                 table_placeholder.dataframe(st.session_state.display_df, use_container_width=True)
                 progress_bar.progress((i + 1) / total)
