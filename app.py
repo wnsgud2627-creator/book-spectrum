@@ -23,7 +23,7 @@ def login():
         st.subheader("🔒 관리자 인증")
         password = st.text_input("비밀번호 입력", type="password")
         if st.button("로그인"):
-            if password == "2300":
+            if password == st.secrets["PASSWORD"]:
                 st.session_state.logged_in = True
                 st.rerun()
             else:
