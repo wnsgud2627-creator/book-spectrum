@@ -63,10 +63,8 @@ if login():
 
         # --- 사이드바 설정 부분에 추가 ---
         st.divider()
-        get_category = st.checkbox("도서 분류 추출", value=True)
-        # 기본 분류 예시 (사용자가 수정 가능)
+        user_category_list = st.text_area("도서 분류 사전", value=default_categories, height=100)
         default_categories = "필독서, 문학, 그림책, 역사인물, 수학과학, 사회경제, 학습교양, 백과, 학습만화, 잡지, 명작 동화, 전래 동화, 창작동화, 인물동화"
-        user_category_list = st.text_area("(하나만 선택됨)", value=default_categories, height=100)
         
         st.divider()
         st.subheader("🎯 추출 항목")
@@ -74,6 +72,7 @@ if login():
         get_isbn = st.checkbox("ISBN13 추출(필수)", value=True, disabled=True)
         get_summary = st.checkbox("줄거리 생성", value=True)
         get_keywords = st.checkbox("키워드 추출", value=True)
+        get_category = st.checkbox("도서 분류 추출", value=True)
 
         st.divider()
         st.subheader("📊 키워드 수량")
@@ -103,7 +102,7 @@ if login():
         return None
 
     def get_book_info_aladin(title, publisher="", author=""):
-        if not (get_isbn or get_summary or get_keywords): return None
+        if not (get_isbn or get_summary or get_keywords, or get_category): return None
         
         # 정보 정제 (괄호 제거 및 군더더기 제거)
         clean_title = re.sub(r'\(.*?\)|\[.*?\]', '', str(title)).strip()
@@ -159,7 +158,7 @@ if login():
            - **구체적 행동**: 숨바꼭질, 요리, 물놀이 등
            - **핵심 소재**: 떡, 기차, 우산 등        
 
-        [작업 3: 도서 분류 선택]
+        [작업 3: 도서 분류 선택] (선택여부: {get_category})
         1. 아래 제공된 **[도서 분류 목록]** 중에서 이 책에 가장 잘 어울리는 카테고리를 **딱 1개만** 선택하세요.
         2. 목록에 없는 새로운 분류를 만들지 마세요. 반드시 제공된 목록 내에서만 골라야 합니다.
 
