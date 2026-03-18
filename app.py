@@ -60,6 +60,14 @@ if login():
         
         st.divider()
         user_keyword_list = st.text_area("표준 키워드 사전", value=DEFAULT_KEYWORDS, height=150)
+
+        # --- 사이드바 설정 부분에 추가 ---
+        st.divider()
+        st.subheader("📁 도서 분류 설정")
+        get_category = st.checkbox("도서 분류 추출", value=True)
+        # 기본 분류 예시 (사용자가 수정 가능)
+        default_categories = "필독서, 문학, 그림책, 역사인물, 수학과학, 사회경제, 학습교양, 백과, 학습만화, 잡지, 명작 동화, 전래 동화, 창작동화, 인물동화"
+        user_category_list = st.text_area("도서 분류 사전 (하나만 선택됨)", value=default_categories, height=100)
         
         st.divider()
         st.subheader("🎯 추출 항목")
@@ -76,14 +84,6 @@ if login():
         st.divider()
         uploaded_file = st.file_uploader("엑셀 업로드", type=["xlsx"])
         start_btn = st.button("🚀 분석 시작", type="primary", use_container_width=True)
-
-        # --- 사이드바 설정 부분에 추가 ---
-        st.divider()
-        st.subheader("📁 도서 분류 설정")
-        get_category = st.checkbox("도서 분류 추출", value=True)
-        # 기본 분류 예시 (사용자가 수정 가능)
-        default_categories = "필독서, 문학, 그림책, 역사인물, 수학과학, 사회경제, 학습교양, 백과, 학습만화, 잡지, 명작 동화, 전래 동화, 창작동화, 인물동화"
-        user_category_list = st.text_area("도서 분류 사전 (하나만 선택됨)", value=default_categories, height=100)
     
 # --- [수정 1] 단계별 검색 함수 ---
     def fetch_aladin(query):
