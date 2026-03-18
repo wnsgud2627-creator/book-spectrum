@@ -11,7 +11,7 @@ import os
 # ==========================================
 # 0. 페이지 기본 설정
 # ==========================================
-st.set_page_config(page_title="Book Spectrum v4.7", layout="wide")
+st.set_page_config(page_title="Book Spectrum v5", layout="wide")
 
 # ==========================================
 # 1. 로그인 기능
@@ -77,6 +77,14 @@ if login():
         uploaded_file = st.file_uploader("엑셀 업로드", type=["xlsx"])
         start_btn = st.button("🚀 분석 시작", type="primary", use_container_width=True)
 
+        # --- 사이드바 설정 부분에 추가 ---
+        st.divider()
+        st.subheader("📁 도서 분류 설정")
+        get_category = st.checkbox("도서 분류 추출", value=True)
+        # 기본 분류 예시 (사용자가 수정 가능)
+        default_categories = "필독서, 문학, 그림책, 역사인물, 수학과학, 사회경제, 학습교양, 백과, 학습만화, 잡지, 명작 동화, 전래 동화, 창작동화, 인물동화"
+        user_category_list = st.text_area("도서 분류 사전 (하나만 선택됨)", value=default_categories, height=100)
+    
 # --- [수정 1] 단계별 검색 함수 ---
     def fetch_aladin(query):
         url = "http://www.aladin.co.kr/ttb/api/ItemSearch.aspx"
@@ -119,8 +127,8 @@ if login():
             
         return result
         
-    def refine_with_gemini(book_data, title, keyword_pool, std_n, total_n, age_group):
-        if not (get_summary or get_keywords): return {"summary": "생략", "keywords": []}
+    def refine_with_gemini(book_data, title, keyword_pool, category_pool, std_n, total_n, age_group):
+        if not (get_summary or get_keywords or get_category): return {"summary": "생략", "keywords": [], "category": "미선택"}
         extra_n = total_n - std_n
         
         if "유아" in age_group:
@@ -151,14 +159,20 @@ if login():
            - **장소/배경**: 숲, 마트, 지하철 등 (원문에 언급된 경우만)
            - **구체적 행동**: 숨바꼭질, 요리, 물놀이 등
            - **핵심 소재**: 떡, 기차, 우산 등        
-        
-        [표준 목록]: {keyword_pool}
+
+        [작업 3: 도서 분류 선택]
+        1. 아래 제공된 **[도서 분류 목록]** 중에서 이 책에 가장 잘 어울리는 카테고리를 **딱 1개만** 선택하세요.
+        2. 목록에 없는 새로운 분류를 만들지 마세요. 반드시 제공된 목록 내에서만 골라야 합니다.
+
+        [표준 키워드 목록]: {keyword_pool}
+        [도서 분류 목록]: {category_pool}
         정보 원문: {book_data['desc'][:1000]}
-        
+    
         응답 형식(JSON): 
         {{
           "summary": "1문장. 2문장. 3문장.",
-          "keywords": ["키워드1", "키워드2", "...", "키워드{total_n}"]
+          "keywords": ["키워드1", "키워드2", "...", "키워드{total_n}"],
+          "category": "선택된 분류명"
         }}
         """
         try:
@@ -177,6 +191,7 @@ if login():
             if get_isbn and 'ISBN13' not in raw_df.columns: raw_df['ISBN13'] = "대기 중..."
             if get_summary and '아이용 줄거리' not in raw_df.columns: raw_df['아이용 줄거리'] = "대기 중..."
             if get_keywords and '추천 키워드' not in raw_df.columns: raw_df['추천 키워드'] = "대기 중..."
+            if get_category and '도서 분류' not in raw_df.columns: raw_df['도서 분류'] = "대기 중..."
             st.session_state.display_df = raw_df
             st.session_state.current_file = uploaded_file.name
 
@@ -193,6 +208,7 @@ if login():
                 if get_isbn: check_cols.append('ISBN13')
                 if get_summary: check_cols.append('아이용 줄거리')
                 if get_keywords: check_cols.append('추천 키워드')
+                if get_category: check_cols.append('도서 분류')
                 
                 if all(row.get(c) not in ["대기 중...", "검색 실패", "분석 실패"] for c in check_cols):
                     continue
@@ -208,28 +224,34 @@ if login():
                     st.session_state.display_df.at[i, 'ISBN13'] = info.get('isbn13')
                     
                     # 2. 줄거리나 키워드가 하나라도 체크된 경우에만 Gemini 호출
-                    if get_summary or get_keywords:
-                        refined = refine_with_gemini(info, row.get('도서명'), user_keyword_list, std_kw_count, total_kw_count, age_group)
+                    if get_summary or get_keywords or get_category:
+                        refined = refine_with_gemini(info, row.get('도서명'), user_keyword_list, user_category_list, std_kw_count, total_kw_count, age_group)
                         
                         if refined:
                             if get_summary: 
                                 st.session_state.display_df.at[i, '아이용 줄거리'] = refined.get('summary')
                             if get_keywords: 
                                 st.session_state.display_df.at[i, '추천 키워드'] = ", ".join(refined.get('keywords', []))
+                            if get_category: 
+                            # 제미나이가 리턴한 JSON 데이터에서 'category' 값을 가져와서 표에 넣음
+                                st.session_state.display_df.at[i, '도서 분류'] = refined.get('category')
                         else:
                             # Gemini 분석 자체가 실패한 경우
                             if get_summary: st.session_state.display_df.at[i, '아이용 줄거리'] = "분석 실패"
                             if get_keywords: st.session_state.display_df.at[i, '추천 키워드'] = "분석 실패"
+                            if get_category: st.session_state.display_df.at[i, '도서 분류'] = "분석 실패"
                     else:
                         # 줄거리/키워드를 아예 체크 안 한 경우 (빈칸 유지 또는 완료 처리)
                         if get_summary: st.session_state.display_df.at[i, '아이용 줄거리'] = "제외됨"
                         if get_keywords: st.session_state.display_df.at[i, '추천 키워드'] = "제외됨"
+                        if get_category: st.session_state.display_df.at[i, '도서 분류'] = "제외됨"
 
                 else:
                     # 알라딘 검색 자체가 실패한 경우
                     if get_isbn: st.session_state.display_df.at[i, 'ISBN13'] = "검색 실패"
                     if get_summary: st.session_state.display_df.at[i, '아이용 줄거리'] = "검색 실패"
                     if get_keywords: st.session_state.display_df.at[i, '추천 키워드'] = "검색 실패"
+                    if get_category: st.session_state.display_df.at[i, '도서 분류'] = "검색 실패"
                 
                 table_placeholder.dataframe(st.session_state.display_df, use_container_width=True)
                 progress_bar.progress((i + 1) / total)
