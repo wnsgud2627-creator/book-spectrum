@@ -63,8 +63,8 @@ if login():
 
         # --- 사이드바 설정 부분에 추가 ---
         st.divider()
-        user_category_list = st.text_area("도서 분류 사전", value=default_categories, height=100)
         default_categories = "필독서, 문학, 그림책, 역사인물, 수학과학, 사회경제, 학습교양, 백과, 학습만화, 잡지, 명작 동화, 전래 동화, 창작동화, 인물동화"
+        user_category_list = st.text_area("도서 분류 사전", value=default_categories, height=100)
         
         st.divider()
         st.subheader("🎯 추출 항목")
@@ -102,7 +102,7 @@ if login():
         return None
 
     def get_book_info_aladin(title, publisher="", author=""):
-        if not (get_isbn or get_summary or get_keywords, or get_category): return None
+        if not (get_isbn or get_summary or get_keywords or get_category): return None
         
         # 정보 정제 (괄호 제거 및 군더더기 제거)
         clean_title = re.sub(r'\(.*?\)|\[.*?\]', '', str(title)).strip()
